@@ -201,7 +201,7 @@ def evaluate_model1(agent, symbol, data, window_size, debug):
     agent.inventory = []
     state = get_state(data, 0, window_size + 1)
     number_of_buys = 0
-    max_transaction = 8
+    max_transaction = 10
     quantity_1 = 5
     max_amount = 1000
     t = 0
@@ -209,10 +209,10 @@ def evaluate_model1(agent, symbol, data, window_size, debug):
     #print(step_size)
     datetime_list = []
     p = []
-    quantity = []
+    quantity = {}
     status= []
     profit = []
-
+    fq = []
     
     while True:
         live = Real(client, symbol)
@@ -229,7 +229,11 @@ def evaluate_model1(agent, symbol, data, window_size, debug):
             status.append("BOUGHT")
             profit.append(0)
             fp = floatPrecision((max_amount / (quantity_1 * live)),step_size )
-            quantity.append(fp)
+            quantity[live] = fp
+            fq.append(fp)
+            client.order_market_buy(
+                symbol=symbol,
+                quantity=fp)
             
             agent.inventory.append(data[t+window_size])
             history.append((data[t+window_size], "BUY"))
@@ -239,22 +243,24 @@ def evaluate_model1(agent, symbol, data, window_size, debug):
         
         elif action == 2 and len(agent.inventory) > 0:
             if agent.inventory != []:
-                for i in range(len(agent.inventory)):
-                    temp = data[t+window_size] - agent.inventory[i]
+                for i in agent.inventory:
+                    temp = data[t+window_size] - i
                     if temp > 0:
                         q = quantity[i]
                         pft = temp * q * 0.999
-                        agent.inventory.remove(agent.inventory[i])
+                        agent.inventory.remove(i)
                         delta = pft
                         reward = delta #max(delta, 0)
                         total_profit += delta
-                        
+                        del quantity[i]
                         datetime_list.append(datetime.now(tz))
                         p.append(live)
-                        quantity.append("Nan")
                         status.append("SOLD")
                         profit.append(delta)
-                        quantity.append(q * 0.999)
+                        fq.append(q * 0.999)
+                        order_market_sell(
+                            symbol=symbol,
+                            quantity=q*0.999)
 
                         history.append((data[t+window_size], "SELL"))
                         if debug:
@@ -274,7 +280,7 @@ def evaluate_model1(agent, symbol, data, window_size, debug):
         t += 1
         if agent.inventory == [] and number_of_buys >= max_transaction:
         
-            df = pd.DataFrame({'Datetime': datetime_list, 'Price': p, 'Quantity Bought/Sold': quantity, 'Status': status, 'Profit made': profit})
+            df = pd.DataFrame({'Datetime': datetime_list, 'Price': p, 'Quantity Bought/Sold': fq, 'Status': status, 'Profit made': profit})
             
             df['Datetime'] = df['Datetime'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
            
@@ -319,8 +325,8 @@ if __name__ == "__main__":
     pretrained = True
     debug = False
     try:
-        make_csv_file(symbol)
-        train(train_stock, val_stock, window_size, batch_size, ep_count, strategy, model_name, pretrained, debug)
+        #make_csv_file(symbol)
+        #train(train_stock, val_stock, window_size, batch_size, ep_count, strategy, model_name, pretrained, debug)
         main(symbol)
     except KeyboardInterrupt:
         print("Aborted")
